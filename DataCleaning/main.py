@@ -18,6 +18,7 @@ assignment may, for the purpose of assessing this assignment:
 import numpy as np
 import scipy as sp
 import pandas as pd
+import re
 import matplotlib.pyplot as plt
 
 
@@ -25,7 +26,8 @@ def convert_to_float(str_number: str) -> float:
     """Fix a few issues with numbers identified in the provided dataset.
 
     Replaces ',' and ';' found in the numbers with '.' and then converts them
-    to floats. If they fail to convert, returns None.
+    to floats. If they fail to convert, returns None. Converts dates using
+    month as the number before the decimal, and the day after the decimal.
 
     Arguments:
         str_number (str): The number in string format.
@@ -35,6 +37,14 @@ def convert_to_float(str_number: str) -> float:
     """
     str_number = str_number.replace(',', '.')
     str_number = str_number.replace(';', '.')
+
+    # Uses regex to find dates and rearrange/replace the numbers
+    if re.search("^[0-9]{1,2}-JAN|FEB", str_number.upper()):
+        str_number = str_number.upper().replace('JAN', '1')
+        str_number = str_number.upper().replace('FEB', '2')
+        parts = str_number.split('-')
+        str_number = parts[1] + "." + parts[0]
+
     try:
         return float(str_number)
     except ValueError:
@@ -54,9 +64,9 @@ def uniformize_variety(str_var: str) -> str:
     """
     if type(str_var) is not str:
         return None
-    if 'Virgi' in str_var:
+    if 'VIRGI' in str_var.upper():
         return 'Virginica'
-    if 'Seto' in str_var:
+    if 'SETO' in str_var.upper():
         return 'Setosa'
     else:
         return str_var
