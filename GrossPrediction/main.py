@@ -21,6 +21,34 @@ from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import linear_model
 import numpy as np
+import matplotlib.pyplot as plt
+
+"""
+Evaluation of code and data:
+
+The best set of columns appears to be past_gross, past_use, and use. 
+past_gross makes sense as it is the former gross amounts. the other two are 
+also money values making them more relevant as well.
+
+One hot encoding and ordinal encoding both appear to be useless when it comes
+to this model for predicting gross. Adding the ordinal encoded town number,
+it appears low on the evaluated relevance list (4th to last). Meaning it is 
+not helpful. For one hot encoding, the town columns seem randomly mixed in
+with the other columns on the relevance list near the top. But the majority
+of town columns appear at the end. Which suggests to me that it is coincidence
+for the ones appearing on the top. The aggregated data, with no ordinal or one
+hot encoding, is the best data to work with. And at that The three most useful
+columns, as adding any more than that barely increases the evaluated score.
+
+One hot encoding adds a huge matrix of mostly 0's with a 1 in each row for
+identifying which town the data is relevant to. In this case it is detrimental
+to add because it makes any analysis of the data take a much longer time. And 
+doesn't help with predicting score. I imagine this is the case because unlike
+the three most useful columns, it is not a money value. And therefore not very
+helpful at predicting future money values. Apart from that, it is not even a 
+piece of trend data that changes from year to year. It is just a 1 or a 0 
+indicating the town.
+"""
 
 
 def get_numerical_columns(df: pd.DataFrame) -> list[str]:
@@ -35,7 +63,7 @@ def get_numerical_columns(df: pd.DataFrame) -> list[str]:
     return numerical_cols
 
 
-def order_relevance(df: pd.DataFrame, y_col: str, x_possibles: list[str], x_currents: list[str] = []) -> list[str]:
+def order_relevance(df: pd.DataFrame, y_col: str, x_possibles: list[str], x_currents = None) -> list[str]:
     """Find which numerical columns (x) are most relevant to modelling a column (y).
 
     Starts by identifying the single most relevant, passes it recursively,
@@ -49,6 +77,8 @@ def order_relevance(df: pd.DataFrame, y_col: str, x_possibles: list[str], x_curr
 
     :return The list built on x_currents. An ordered list starting with the most relevant.
     """
+    if x_currents is None:
+        x_currents = []
     gross_predictor = linear_model.LinearRegression()
 
     # Base case
@@ -92,6 +122,7 @@ if __name__ == '__main__':
     # Irrelevant numerical data (sum makes it nonsense)
     df_agg.drop('month_num', axis=1, inplace=True)
 
+    # Examine which columns are relevant.
     # Use functions to identify the order of relevance of numerical data.
     numerical_cols = get_numerical_columns(df_agg)
     numerical_cols.remove('gross')
@@ -104,15 +135,54 @@ if __name__ == '__main__':
     y = np.array(df_agg['gross']).reshape(-1, 1)
     print(gross_predictor.fit(x, y).score(x, y))
 
+    # Builds and plots scores from different combinations
+    scores = []
+    for i in range(len(order_of_relevance)):
+        x = np.array(df_agg[order_of_relevance[0:i+1]])
+        y = np.array(df_agg['gross']).reshape(-1, 1)
+        scores.append(gross_predictor.fit(x, y).score(x, y))
+
+    plt.figure()
+    plt.plot(range(1, len(order_of_relevance) + 1), scores, ".", color='r')
+    plt.xlabel("First n Most Relevant Columns")
+    plt.ylabel("Line Model Score")
+    plt.savefig("LineModelScores")
+    plt.show()
+
+    # Build new dataframe with all non-numeric columns and 3 most relevant columns.
+    non_numeric_cols = [col for col in df_agg.columns if col not in get_numerical_columns(df_agg)]
+    df_important = df_agg[non_numeric_cols + ['gross'] + order_of_relevance[0:3]].copy(deep=True)
+    # Export to csv.
+    df_important.to_csv(r'relevant_data.csv', index=False, header=True)
+
     """
-    # Redefining towns by mapping each town to an integer
+    # ORDINAL ENCODING
+    # Ordinal encoding; redefining towns by mapping each town to an integer
     ordinal_encoder = OrdinalEncoder()
     # Turns series (town column) into a numpy array (column vector) and reshape turns it into a row vector.
-    town_data_reshaped = np.array(df_combined['town']).reshape(-1, 1)
+    town_data_reshaped = np.array(df_agg['town']).reshape(-1, 1)
     # Fit transform maps the towns to integers. Needs a row vector.
     town_data_encoded = ordinal_encoder.fit_transform(town_data_reshaped)
+    # Copy aggregated data and add the ordinal encoded town number as a column
+    df_ord = df_agg.copy(deep=True)
+    df_ord['town_num'] = town_data_encoded
+
+    # Examine which columns are relevant.
+    # Use functions to identify the order of relevance of numerical data.
+    numerical_cols = get_numerical_columns(df_ord)
+    numerical_cols.remove('gross')
+    order_of_relevance = order_relevance(df_ord, 'gross', numerical_cols)
+    print(order_of_relevance)
+
+    # Score using the 3 most relevant numerical columns.
+    gross_predictor = linear_model.LinearRegression()
+    x = np.array(df_ord[order_of_relevance[0:3]])
+    y = np.array(df_ord['gross']).reshape(-1, 1)
+    print(gross_predictor.fit(x, y).score(x, y))
     """
 
+    """
+    # ONE HOT ENCODING (LONG RUN TIME)
     # Using One Hot Encoder to redefine data structure
     town_oh_encoder = OneHotEncoder(sparse=False)  # sparse=False prevents it from creating a sparse matrix. just a regular one
     # Turns series (town column) into a numpy array (column vector) and reshape turns it into a row vector.
@@ -131,3 +201,5 @@ if __name__ == '__main__':
     order_of_relevance = order_relevance(data_concat, 'gross', numerical_cols)
     print(order_of_relevance)
     print(numerical_cols)
+    """
+
