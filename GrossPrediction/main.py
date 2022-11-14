@@ -2,7 +2,7 @@
 
     Author: Jake Myers
     Class: DAT-330
-    Assignment: Data Cleaning and Packages
+    Assignment: Your First Model (Gross Prediction)
 
 Certification of Authenticity:
 I certify that this is entirely my own work, except where I have given
