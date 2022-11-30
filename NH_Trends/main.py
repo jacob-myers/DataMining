@@ -5,8 +5,11 @@ import pandas as pd
 import numpy as np
 
 # Does a value exist in a column?: https://www.statology.org/pandas-check-if-value-in-column/
+# Check null stuff: https://datatofish.com/check-nan-pandas-dataframe/
 
 
+# Reads an IRS .xlsx file for a year in NH.
+# Returns a dataframe, cleaned up data by ZIP.
 def import_and_clean_irs(filename: str):
     # CLEAN COLUMNS
     # Reading in data sheet with a multi-level column index.
@@ -46,6 +49,10 @@ def import_and_clean_irs(filename: str):
     indices = df[df['ZIP'] == 03291.0].index
     df.drop(indices, inplace=True)
 
+    # Drop year totals (can be calculated, also not accurate after other drops).
+    indices = df[df['ZIP'] == 00000.0].index
+    df.drop(indices, inplace=True)
+
     # Reset index and delete old index.
     df.reset_index(inplace=True)
     del df['index']
@@ -53,24 +60,100 @@ def import_and_clean_irs(filename: str):
     return df
 
 
-if __name__ == '__main__':
-    df_2015 = import_and_clean_irs("nh_2015.xlsx")
-    #df_2016 = import_and_clean_irs("nh_2016.xlsx")
-    #df_2017 = import_and_clean_irs("nh_2017.xlsx")
-    #df_2018 = import_and_clean_irs("nh_2018.xlsx")
-    #df_2019 = import_and_clean_irs("nh_2019.xlsx")
+# Takes a dataframe, the tax data by zip/size of gross income.
+# Returns a dataframe, the tax data by zip, with each size as a feature.
+def reshape_by_ZIP(df: pd.DataFrame):
+    
+    # Dataframe with just totals for each zip.
+    df_totals = df.loc[df['Size of adjusted gross income'].isnull()]
+    df_totals = df_totals.set_index('ZIP')
+    del df_totals['Size of adjusted gross income']
 
-    #Income tax before credit (2019) = Income tax (2015)
+    # Dataframe with all rows of specific brackets.
+    df_per_bracket = df.loc[df['Size of adjusted gross income'].notnull()]
 
-    cols_2015 = np.array(df_2015.columns)
-
-    # Same amount of empty rows?
     """
+    # Ensure df_new and df_old contain everything from df
+    print(df.info())
+    print(df_totals.info())
+    print(df_per_bracket.info())
+    """
+
+    # Pivot data: https://stackoverflow.com/questions/44725441/create-new-columns-based-on-unique-values-of-values-in-pandas
+    # Pick just three columns (Amount of returns in each bracket).
+    df_per_bracket = df_per_bracket[['ZIP', 'Size of adjusted gross income', 'Number of returns']]
+    # New dataframe generated: Index is the zip, columns are the brackets, values are the amount of returns.
+    df_pivoted = df_per_bracket.pivot_table(values='Number of returns', columns='Size of adjusted gross income', index='ZIP')
+
+    # Renaming columns in pivoted dataframe
+    df_pivoted.rename(columns={
+        '$1 under $25,000': 'Number of returns with income between $1 and $25,000',
+        '$25,000 under $50,000': 'Number of returns with income between $25,000 and $50,000',
+        '$50,000 under $75,000': 'Number of returns with income between $50,000 and $75,000',
+        '$75,000 under $100,000': 'Number of returns with income between $75,000 and $100,000',
+        '$100,000 under $200,000': 'Number of returns with income between $100,000 and $200,000',
+        '$200,000 or more': 'Number of returns with income $200,000 or more',
+        }, inplace=True)
+
+    # Merge the totals with the pivoted df. (Adding amount of returns in a bracket as a column, 6 total)
+    df_combined = df_totals.merge(df_pivoted, how='inner', on=['ZIP'])
+
+    # Rearrange the columns.
+    # Number of returns, then cols for returns in each bracket, then the rest of the cols.
+    df_combined_cols = np.array(df_combined.columns).tolist()
+    df_combined_cols = np.array(df_combined.columns).tolist()
+    first_cols = ['Number of returns',
+                 'Number of returns with income between $1 and $25,000',
+                 'Number of returns with income between $25,000 and $50,000',
+                 'Number of returns with income between $50,000 and $75,000',
+                 'Number of returns with income between $75,000 and $100,000',
+                 'Number of returns with income between $100,000 and $200,000',
+                 'Number of returns with income $200,000 or more']
+    for col in first_cols:
+        if col in df_combined_cols:
+            df_combined_cols.remove(col)
+
+    df_combined = df_combined[first_cols + df_combined_cols]
+
+    # Reset index (currently ZIP, so that ZIP is a column again)
+    df_combined = df_combined.reset_index()
+    return df_combined
+
+
+if __name__ == '__main__':
+    raw_2015 = import_and_clean_irs("nh_2015.xlsx")
+    #raw_2016 = import_and_clean_irs("nh_2016.xlsx")
+    #raw_2017 = import_and_clean_irs("nh_2017.xlsx")
+    #raw_2018 = import_and_clean_irs("nh_2018.xlsx")
+    #raw_2019 = import_and_clean_irs("nh_2019.xlsx")
+
+    df_2015 = reshape_by_ZIP(raw_2015)
+    #df_2016 = reshape_by_ZIP(raw_2016)
+    #df_2017 = reshape_by_ZIP(raw_2017)
+    #df_2018 = reshape_by_ZIP(raw_2018)
+    #df_2019 = reshape_by_ZIP(raw_2019)
+
+    # Income tax before credit (2019) = Income tax (2015)
+    # Note: cols_2015 = np.array(raw_2015.columns)
+
+    print(df_2015.info(verbose=True))
+
+
+
+    """
+    # All are 229, meaning one null (Size of adjusted gross income) per ZIP
+    # This is the total for the year. Meaning there are no other nulls in the DB
     print(df_2015.isnull().sum().sum())
     print(df_2016.isnull().sum().sum())
     print(df_2017.isnull().sum().sum())
     print(df_2018.isnull().sum().sum())
     print(df_2019.isnull().sum().sum())
+
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
     """
 
     # Identify ZIP codes that exist in 2015 and not 2016.
