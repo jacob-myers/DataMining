@@ -6,6 +6,26 @@ from sklearn.tree import DecisionTreeRegressor
 import matplotlib.pyplot as plt
 
 
+"""
+Analysis:
+Each run could be different. Only random state = 42 on train test split gave
+reasonable scores. Depending on the split, I could get varying scores as well,
+usually around 0.2. The following is a sample output from running the program:
+
+0.21175029123862477
+0.21175029123862454
+0.21175029123862488
+0.21175029123862477
+0.21175029123862488
+0.21175029123862477
+0.2117502912386252
+0.211750291238625
+0.211750291238625
+0.211750291238625
+
+"""
+
+
 if __name__ == '__main__':
     df = pd.read_csv("DemographicData_VT - DemographicData_VT.csv")
 
@@ -44,7 +64,7 @@ if __name__ == '__main__':
     #df['population_density'] = df['total_population']/df['AREA']
 
     # DATA NORMALIZATION
-    print(df.sample(10).to_string())
+    #print(df.sample(10).to_string())
 
     # Normalize to range 0-1, multiply by median of target.
     # Adding median rent scale possibly improves score?
@@ -71,8 +91,7 @@ if __name__ == '__main__':
     #X = df.loc[:, df.columns != "median_age"]
     #y = df['median_age']
 
-    # Score of 100 runs.
-    dt_score = 0
+    # Models it 10 times.
     for i in range(10):
         # Usually better scores
         X_train, X_test, y_train, y_test = train_test_split(df.drop(columns=['median_age']), df['median_age'], test_size=.25, random_state=42)
@@ -83,6 +102,4 @@ if __name__ == '__main__':
         # Model with a decision tree regression
         dt = DecisionTreeRegressor(max_depth=5, max_leaf_nodes=50)  # Optimized values for accuracy
         dt_reg = dt.fit(X_train, y_train)
-        dt_score += dt_reg.score(X_test, y_test)
         print(dt_reg.score(X_test, y_test))
-    print(dt_score/10)
