@@ -1,8 +1,10 @@
+from scipy import stats
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
@@ -24,6 +26,23 @@ usually around 0.2. The following is a sample output from running the program:
 0.211750291238625
 
 """
+
+
+def get_f_important_features(X, f: int, n_components: float):
+    pca = PCA(n_components=n_components)
+    pca_model = pca.fit_transform(X)
+
+    # Number of components
+    n_pcs = pca.components_.shape[0]
+    # Index of most important feature in each component
+    most_important = [np.abs(pca.components_[i]).argmax() for i in range(n_pcs)]
+    # Feature names
+    initial_feature_names = [col for col in X.columns]
+    # Putting feature names in order of importance
+    most_important_names = [initial_feature_names[most_important[i]] for i in range(n_pcs)]
+
+    # Uses the first f column names (most important) to build a new dataframe.
+    return X[most_important_names[:f]]
 
 
 if __name__ == '__main__':
@@ -85,6 +104,22 @@ if __name__ == '__main__':
     #df['nonsense3'] = df['Gross Income'] / df['CITY']
     df['nonsense4'] = df['AREA'] / df['CITY']
     df['nonsense5'] = df['total_population'] / df['Zip Code']
+
+    # ZSCORE Normalization
+    # Probably over-fitting.
+    # Any attempt to normalize without the full dataset (including target) reduces score.
+    # Removing all engineered features does not improve over-fitting.
+    #df = stats.zscore(df, axis=1)
+
+    #df = df.drop(columns=['Gross Income', 'ALAND10', 'AWATER10', 'Per Capita Income'])
+
+    #feat = get_f_important_features(df.drop(columns=['median_age']), 10, 5)
+    #print(feat)
+
+    # Normalizing the features that explain large variance does not improve score at all.
+    df['Gross Income'] = abs((df['Gross Income'] - df['Gross Income'].mean()) / (df['Gross Income'].std()))
+    df['ALAND10'] = abs((df['ALAND10'] - df['ALAND10'].mean()) / (df['ALAND10'].std()))
+    df['AWATER10'] = abs((df['AWATER10'] - df['AWATER10'].mean()) / (df['AWATER10'].std()))
 
     # Define train test split variables.
     # Messes score up somehow even though it picks the exact same stuff.
