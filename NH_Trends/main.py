@@ -2,9 +2,12 @@
 # Author: Jake Myers
 
 """
-Testing 2015:
+Testing 2015 (No Engineering, original parameters for regressor):
 Average score with 15 important features: 0.2816386355546581
 Average score with full dataset: 0.2903930567306121
+
+Testing 2015 (No engineering, adjusted parameters)
+Average score: 0.3583475972884657
 """
 
 import pandas as pd
@@ -12,6 +15,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
+from scipy.stats import zscore
 
 # Does a value exist in a column?: https://www.statology.org/pandas-check-if-value-in-column/
 # Check null stuff: https://datatofish.com/check-nan-pandas-dataframe/
@@ -151,7 +155,10 @@ def create_forest(df: pd.DataFrame) -> (float, object):
         df['Change in returns since previous year'],
         test_size=.25,
         random_state=42)
-    rf = RandomForestRegressor(max_depth=5)
+    # criterion = 'absolute_error' has shown the most success. Much slower run time.
+    # Max depth seems best around 5-7
+    # Min samples split doesn't change too much, maybe best around 7
+    rf = RandomForestRegressor(criterion="squared_error", max_depth=6, min_samples_split=7)
     rf_reg = rf.fit(X_train, y_train)
     return rf.score(X_test, y_test), rf_reg
 
@@ -173,6 +180,35 @@ def get_f_important_features(X, f: int, n_components: float):
 
     # Uses the first f column names (most important) to build a new dataframe.
     return X[most_important_names[:f]]
+
+
+def turn_into_pca_components(X, n_components: float):
+    pca = PCA(n_components=n_components)
+    pca_model = pca.fit_transform(X)
+    print(pd.DataFrame(pca.components_).info())
+    return pd.DataFrame(pca.components_)
+
+
+# Normalize n most variant features.
+# Has no noticeable effect on score
+def normalize_features(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    var_df = df.var()
+    #print(df_2015.var().nlargest(10).to_string())
+    #print(var_df[var_df == var_df.max()].index[0])  # Name of column?
+
+    # Normalize n features with the greatest variance.
+    for feat in var_df.nlargest(n):
+        #print(var_df[var_df == feat].index[0]) # Index of feat (index for series is column name).
+        col_name = var_df[var_df == feat].index[0]
+        df[col_name] = zscore(df[col_name])
+        #print(df[col_name])
+
+    """
+    for col in df.columns:
+        df[col] = zscore(df[col])
+    """
+
+    return df
 
 
 """
@@ -219,6 +255,12 @@ if __name__ == '__main__':
     #df_2018 = reshape_by_ZIP(raw_2018)
     #df_2019 = reshape_by_ZIP(raw_2019)
 
+    df_2015 = create_deltas(df_2014, df_2015)
+    #df_2016 = create_deltas(df_2015, df_2016)
+    #df_2017 = create_deltas(df_2016, df_2017)
+    #df_2018 = create_deltas(df_2017, df_2018)
+    #df_2019 = create_deltas(df_2018, df_2019)
+
     # Income tax before credit (2019) = Income tax (2015)
     # Note: cols_2015 = np.array(raw_2015.columns)
 
@@ -226,6 +268,24 @@ if __name__ == '__main__':
 
     #test_year(2019)
 
+    # Income has highest variance
+    # print(df_2015.var().info())
+
+    # Dimension reduction.
+    #engineered_2015 = get_f_important_features(df_2015.drop(columns=['Change in returns since previous year']), 15, 15)
+    #engineered_2015['Change in returns since previous year'] = df_2015['Change in returns since previous year']
+
+    # Normalization.
+    #engineered_2015 = normalize_features(df_2015, 0)
+
+    avg_score_small_set = 0
+    for i in range(10):
+        # Does train test split inside.
+        rf_score, rf_reg = create_forest(df_2015)
+        avg_score_small_set += rf_score
+        print(rf_score)
+    avg_score_small_set /= 10
+    print(f'Average score after normalization: {avg_score_small_set}')
 
     """
     X_train, X_test, y_train, y_test = train_test_split(
@@ -235,19 +295,24 @@ if __name__ == '__main__':
         random_state=42)
     """
 
-    df_2015 = create_deltas(df_2015, df_2014)
+
+    """
+    # TEST YEAR VS REDUCED.
+    # Can explain much of the variance with a fraction of the features.
     important = get_f_important_features(df_2015.drop(columns=['Change in returns since previous year']), 15, 15)
     important['Change in returns since previous year'] = df_2015['Change in returns since previous year']
-    #print(important.sample(10))
 
     avg_score_small_set = 0
     for i in range(100):
+        # Does train test split inside.
         rf_score, rf_reg = create_forest(important)
         avg_score_small_set += rf_score
     avg_score_small_set /= 100
     print(f'Average score with 15 important features: {avg_score_small_set}')
 
     test_year(2015)
+    """
+
 
     """
     pca = PCA(n_components=10)
