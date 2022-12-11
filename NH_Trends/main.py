@@ -7,7 +7,7 @@ Average score with 15 important features: 0.2816386355546581
 Average score with full dataset: 0.2903930567306121
 
 Testing 2015 (No engineering, adjusted parameters)
-Average score: 0.3583475972884657
+Average score: 0.35989386105395005
 """
 
 import pandas as pd
@@ -158,7 +158,7 @@ def create_forest(df: pd.DataFrame) -> (float, object):
     # criterion = 'absolute_error' has shown the most success. Much slower run time.
     # Max depth seems best around 5-7
     # Min samples split doesn't change too much, maybe best around 7
-    rf = RandomForestRegressor(criterion="squared_error", max_depth=6, min_samples_split=7)
+    rf = RandomForestRegressor(criterion="absolute_error", max_depth=6, min_samples_split=7)
     rf_reg = rf.fit(X_train, y_train)
     return rf.score(X_test, y_test), rf_reg
 
