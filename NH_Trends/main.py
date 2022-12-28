@@ -8,31 +8,6 @@ Average score with full dataset: 0.2903930567306121
 
 Testing 2015 (No engineering, adjusted parameters)
 Average score: 0.35989386105395005
-
-Final Results:
-(Default)
-Average Score 2015: 0.3835141409442009
-Average Score 2016: -0.3358394993762476
-Average Score 2017: 0.6330135886859775
-Average Score 2018: 0.3984971955626156
-Average Score 2019: 0.3778606594504725
-Average score with years combined: 0.23213134427052276
-
-(After Full Normalization Method)
-Average Score 2015: 0.867783280215804
-Average Score 2016: 0.6876975453932882
-Average Score 2017: 0.8039867999897643
-Average Score 2018: 0.8021215802992412
-Average Score 2019: 0.7468203920532035
-Average score with years combined: 0.8598821856103147
-
-(Examining fully normalized data)
-Most important features (from custom PCA method):
-2015: ['Total itemized deductions | Amount of AGI', 'Salaries and wages in AGI | Amount', 'ZIP', 'Taxable income | Amount', 'Pensions and annuities in AGI | Amount']
-2016: ['Total itemized deductions | Amount of AGI', 'Salaries and wages in AGI | Amount', 'ZIP', 'Pensions and annuities in AGI | Amount', 'Net capital gain (less loss) in AGI | Amount']
-2017: ['Total itemized deductions | Amount of AGI', 'Salaries and wages in AGI | Amount', 'ZIP', 'Taxable income | Amount', 'Taxable income | Amount']
-2018: ['Total itemized deductions | Amount of AGI', 'Salaries and wages in AGI | Amount', 'ZIP', 'Total itemized deductions | Amount of AGI', 'Qualified business income deduction | Amount']
-2019: ['Total itemized deductions | Amount of AGI', 'Salaries and wages in AGI | Amount', 'ZIP', 'Total itemized deductions | Amount of AGI', 'Taxable income | Amount']
 """
 
 import pandas as pd
@@ -41,7 +16,6 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from scipy.stats import zscore
-from scipy import stats
 
 # Does a value exist in a column?: https://www.statology.org/pandas-check-if-value-in-column/
 # Check null stuff: https://datatofish.com/check-nan-pandas-dataframe/
@@ -70,9 +44,11 @@ def import_and_clean_irs(filename: str) -> pd.DataFrame:
     df.columns = df.columns.str.replace(r'\n', '', regex=True)
 
     # CLEAN DATA
+    # TO DO
     # Rename columns
     df.rename(columns={'ZIPcode':'ZIP'}, inplace=True)
     df.rename(columns={'Number of dependent exemptions': 'Number of dependents'}, inplace=True)  # 2017
+
 
     # Remove blank lines (Where ZIP code is blank) and end lines (dumb info)
     # Forcing it to numeric, and deleting all non numeric, so Na and NaN
@@ -206,16 +182,6 @@ def get_f_important_features(X, f: int, n_components: float):
     return X[most_important_names[:f]]
 
 
-# Use df.var() to find the features that explain the most variance in the dataset.
-def get_f_variant_features(df: pd.DataFrame, f: int):
-    variant_features = []
-    var_df = df.var()
-    for feat in var_df.nlargest(f):
-        variant_features.append(var_df[var_df == feat].index[0])
-    return variant_features
-
-
-# Not used.
 def turn_into_pca_components(X, n_components: float):
     pca = PCA(n_components=n_components)
     pca_model = pca.fit_transform(X)
@@ -227,13 +193,14 @@ def turn_into_pca_components(X, n_components: float):
 # Has no noticeable effect on score
 def normalize_features(df: pd.DataFrame, n: int) -> pd.DataFrame:
     var_df = df.var()
-    df_new = df.copy(deep=True)
+    #print(df_2015.var().nlargest(10).to_string())
+    #print(var_df[var_df == var_df.max()].index[0])  # Name of column?
 
     # Normalize n features with the greatest variance.
     for feat in var_df.nlargest(n):
         #print(var_df[var_df == feat].index[0]) # Index of feat (index for series is column name).
         col_name = var_df[var_df == feat].index[0]
-        df_new[col_name] = zscore(df_new[col_name])
+        df[col_name] = zscore(df[col_name])
         #print(df[col_name])
 
     """
@@ -241,21 +208,16 @@ def normalize_features(df: pd.DataFrame, n: int) -> pd.DataFrame:
         df[col] = zscore(df[col])
     """
 
-    return df_new
+    return df
 
 
-# Returns a dataframe with all dataframes appended. Drops columns with NaNs.
-# When modeled on, provides a very poor score.
-def combine_all_years(dfs: list[pd.DataFrame]) -> pd.DataFrame:
-    df_total = dfs[0]
-    dfs.pop(0)
-    for df in dfs:
-        df_total = df_total.append(df, ignore_index=True)
-    df_total = df_total.dropna(axis=1, how='any') # If there are any NaN's in a col, drop it.
-    return df_total
+"""
+# Engineer features.
+def engineer_tax_df(df: list[pd.DataFrame]) -> pd.DataFrame:
+    pass
+"""
 
 
-# DEPRECATED, use test_dataframe
 # Runs all cleaning, reshaping, engineering, scoring on a year (needs prev year as well)
 def test_year(year: int) -> None:
     raw_df = import_and_clean_irs(f"nh_{year}.xlsx")
@@ -278,152 +240,61 @@ def test_year(year: int) -> None:
     print(f'Average score with full dataset: {avg_score}')
 
 
-# Tests creation of a forest on given dataframe 'runs' number of times
-def test_dataframe(df: pd.DataFrame, runs: int) -> None:
-    avg_score = 0
-    for i in range(runs):
-        # Does train test split inside create_forest.
-        rf_score, rf_reg = create_forest(df)
-        avg_score += rf_score
-        print(rf_score)
-    avg_score /= runs
-    print(f'Average score: {avg_score}')
-
-
-# Not used.
-# Show variance by different methods.
-def test_variance(df: pd.DataFrame) -> None:
-    # Most variant features
-    features = get_f_variant_features(df, 5)
-    print(features)
-
-    # Normalize some pieces and then see most variant features
-    engineered_df = normalize_features(df, 25)
-    features_eng = get_f_variant_features(engineered_df, 5)
-    print(features_eng)
-
-    # Look at most important features according to PCA
-    features_imp = get_f_important_features(df.drop(columns=['Change in returns since previous year']), 5, 5)
-    print(list(features_imp))
-
-
 if __name__ == '__main__':
-    # Import data and clean it up.
     raw_2014 = import_and_clean_irs("nh_2014.xlsx")
     raw_2015 = import_and_clean_irs("nh_2015.xlsx")
-    raw_2016 = import_and_clean_irs("nh_2016.xlsx")
-    raw_2017 = import_and_clean_irs("nh_2017.xlsx")
-    raw_2018 = import_and_clean_irs("nh_2018.xlsx")
-    raw_2019 = import_and_clean_irs("nh_2019.xlsx")
+    #raw_2016 = import_and_clean_irs("nh_2016.xlsx")
+    #raw_2017 = import_and_clean_irs("nh_2017.xlsx")
+    #raw_2018 = import_and_clean_irs("nh_2018.xlsx")
+    #raw_2019 = import_and_clean_irs("nh_2019.xlsx")
 
-    # Reshape into smaller dataframes based on only ZIP.
     df_2014 = reshape_by_ZIP(raw_2014)
     df_2015 = reshape_by_ZIP(raw_2015)
-    df_2016 = reshape_by_ZIP(raw_2016)
-    df_2017 = reshape_by_ZIP(raw_2017)
-    df_2018 = reshape_by_ZIP(raw_2018)
-    df_2019 = reshape_by_ZIP(raw_2019)
+    #df_2016 = reshape_by_ZIP(raw_2016)
+    #df_2017 = reshape_by_ZIP(raw_2017)
+    #df_2018 = reshape_by_ZIP(raw_2018)
+    #df_2019 = reshape_by_ZIP(raw_2019)
 
-    # Create 'change in' variables between years.
-    df_2015 = create_deltas(df_2015, df_2014)
-    df_2016 = create_deltas(df_2016, df_2015)
-    df_2017 = create_deltas(df_2017, df_2016)
-    df_2018 = create_deltas(df_2018, df_2017)
-    df_2019 = create_deltas(df_2019, df_2018)
+    df_2015 = create_deltas(df_2014, df_2015)
+    #df_2016 = create_deltas(df_2015, df_2016)
+    #df_2017 = create_deltas(df_2016, df_2017)
+    #df_2018 = create_deltas(df_2017, df_2018)
+    #df_2019 = create_deltas(df_2018, df_2019)
 
-    # Fully normalizes entire dataframe for each year using zscores.
-    # Different method from normalize_features
-    df_2015_norm = stats.zscore(df_2015, axis=1)
-    df_2016_norm = stats.zscore(df_2016, axis=1)
-    df_2017_norm = stats.zscore(df_2017, axis=1)
-    df_2018_norm = stats.zscore(df_2018, axis=1)
-    df_2019_norm = stats.zscore(df_2019, axis=1)
+    # Income tax before credit (2019) = Income tax (2015)
+    # Note: cols_2015 = np.array(raw_2015.columns)
 
-    """
-    # Print data dictionary for report.
-    print(f'Data Dictionary for 2015')
-    print(f'Target: Change in returns since previous year')
-    print(f'Features: ')
-    for col in df_2015.columns:
-        print(col)
-    """
+    #print(df_2015.info(verbose=True))
 
-    # Dimension reduction example.
-    # Not used in full run
+    #test_year(2019)
+
+    # Income has highest variance
+    # print(df_2015.var().info())
+
+    # Dimension reduction.
     #engineered_2015 = get_f_important_features(df_2015.drop(columns=['Change in returns since previous year']), 15, 15)
     #engineered_2015['Change in returns since previous year'] = df_2015['Change in returns since previous year']
 
-    # Original normalization example.
-    # Not used in full run
-    #engineered_2015 = normalize_features(df_2015, 10)
+    # Normalization.
+    #engineered_2015 = normalize_features(df_2015, 0)
 
-
-
-    # FULL RUN (Will take a while.)
-    
-    # Each year individually.
-    print("NON-NORMALIZED METHOD")
-    print("Testing 2015: ")
-    test_dataframe(df_2015, 10)
-    print("Testing 2016: ")
-    test_dataframe(df_2016, 10)
-    print("Testing 2017: ")
-    test_dataframe(df_2017, 10)
-    print("Testing 2018: ")
-    test_dataframe(df_2018, 10)
-    print("Testing 2019: ")
-    test_dataframe(df_2019, 10)
-    
-    # Combine all years.
-    df_smashed = combine_all_years([df_2015, df_2016, df_2017, df_2018, df_2019])
-    test_dataframe(df_smashed, 10)
-    
-    # Important Features:
-    print('Most important features (from custom PCA method):')
-    print(f'2015: {list(get_f_important_features(df_2015.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2016: {list(get_f_important_features(df_2016.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2017: {list(get_f_important_features(df_2017.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2018: {list(get_f_important_features(df_2018.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2019: {list(get_f_important_features(df_2019.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-
-    # Each year individually.
-    print("FULLY NORMALIZED METHOD")
-    print("Testing 2015: ")
-    test_dataframe(df_2015_norm, 10)
-    print("Testing 2016: ")
-    test_dataframe(df_2016_norm, 10)
-    print("Testing 2017: ")
-    test_dataframe(df_2017_norm, 10)
-    print("Testing 2018: ")
-    test_dataframe(df_2018_norm, 10)
-    print("Testing 2019: ")
-    test_dataframe(df_2019_norm, 10)
-
-    # Combine all years.
-    df_norm_smashed = combine_all_years([df_2015_norm, df_2016_norm, df_2017_norm, df_2018_norm, df_2019_norm])
-    test_dataframe(df_norm_smashed, 5)
-
-    # Identify important features from each year.
-    print('Most important features (from custom PCA method):')
-    print(f'2015: {list(get_f_important_features(df_2015_norm.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2016: {list(get_f_important_features(df_2016_norm.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2017: {list(get_f_important_features(df_2017_norm.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2018: {list(get_f_important_features(df_2018_norm.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-    print(f'2019: {list(get_f_important_features(df_2019_norm.drop(columns=["Change in returns since previous year"]), 5, 5))}')
-
-    # END FULL RUN
-
+    avg_score_small_set = 0
+    for i in range(10):
+        # Does train test split inside.
+        rf_score, rf_reg = create_forest(df_2015)
+        avg_score_small_set += rf_score
+        print(rf_score)
+    avg_score_small_set /= 10
+    print(f'Average score after normalization: {avg_score_small_set}')
 
     """
-    # Exporting my cleaned data.
-    df_2015.to_csv('ExportedCSVs/byZIP_2015.csv', index=False)
-    df_2016.to_csv('ExportedCSVs/byZIP_2016.csv', index=False)
-    df_2017.to_csv('ExportedCSVs/byZIP_2017.csv', index=False)
-    df_2018.to_csv('ExportedCSVs/byZIP_2018.csv', index=False)
-    df_2019.to_csv('ExportedCSVs/byZIP_2019.csv', index=False)
+    X_train, X_test, y_train, y_test = train_test_split(
+        df_2015.drop(columns=['Change in returns since previous year']),
+        df_2015['Change in returns since previous year'],
+        test_size=.25,
+        random_state=42)
     """
 
-    # NOTES AND INVESTIGATION SECTION (testing stuff)
 
     """
     # TEST YEAR VS REDUCED.
@@ -441,6 +312,7 @@ if __name__ == '__main__':
 
     test_year(2015)
     """
+
 
     """
     pca = PCA(n_components=10)
@@ -465,10 +337,10 @@ if __name__ == '__main__':
     print(df_2019.isnull().sum().sum())
 
     print(df_2015['ZIP'].nunique())
-    print(df_2016['ZIP'].nunique())
-    print(df_2017['ZIP'].nunique())
-    print(df_2018['ZIP'].nunique())
-    print(df_2019['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
+    print(df_2015['ZIP'].nunique())
     """
 
     # Identify ZIP codes that exist in 2015 and not 2016.
